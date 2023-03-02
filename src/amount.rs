@@ -27,7 +27,7 @@ static MIN_F64_ALLOWED: f64 = {
     small as f64
 };
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub struct AmountInner<Amt, Cur: FromCurrency> {
     amount: Amt,
     currency: Cur,
@@ -123,7 +123,7 @@ mod tests {
         }
     }
 
-    #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, serde::Deserialize)]
     enum Currency {
         Inr,
         Usd,
@@ -132,17 +132,25 @@ mod tests {
     type Amount = AmountInner<LowestDenomination, Currency>;
     type AmountHD = AmountInner<HighestDenomination, Currency>;
 
+    #[derive(serde::Deserialize)]
+    #[allow(dead_code)]
+    struct Request {
+        #[serde(flatten)]
+        amount: Amount,
+        id: i8, 
+    }
+
     #[test]
     fn unit_case() -> Result<(), AmmountConversionError<Currency>> {
         let amount = Amount::new(1, &Currency::Usd);
         let high_denomination: AmountHD = amount.convert()?;
         let lower_denomination: Amount = high_denomination.convert()?;
-        assert_eq!(lower_denomination, amount);
+        assert_eq!(amount, lower_denomination);
 
         let amount = Amount::new(1, &Currency::Inr);
         let high_denomination: AmountHD = amount.convert()?;
         let lower_denomination: Amount = high_denomination.convert()?;
-        assert_eq!(lower_denomination, amount);
+        assert_eq!(amount, lower_denomination);
         Ok(())
     }
 
@@ -152,45 +160,45 @@ mod tests {
         let high_denomination: AmountHD = amount.convert()?;
         let lower_denomination: Amount = high_denomination.convert()?;
 
-        assert_eq!(lower_denomination, amount);
+        assert_eq!(amount, lower_denomination);
         Ok(())
     }
 
     #[test]
     fn i32_max_number_without_amount() {
-        let amount = i32::MAX;
-        let high_denomination = amount as f32 / 100.0_f32;
-        let lower_denomination = (high_denomination * 100.0_f32) as i32;
+        let amount_lhs = i32::MAX;
+        let high_denomination_lhs = amount_lhs as f32 / 100.0_f32;
+        let lower_denomination_lhs = (high_denomination_lhs * 100.0_f32) as i32;
 
         let amount_rhs = i32::MAX - 1;
         let high_denomination_rhs = amount_rhs as f32 / 100.0_f32;
         let lower_denomination_rhs = (high_denomination_rhs * 100.0_f32) as i32;
 
-        assert_eq!(lower_denomination, amount);
-        assert_eq!(lower_denomination, lower_denomination_rhs); // This is invalid but as_conversion fails here
+        assert_eq!(amount_lhs, lower_denomination_lhs);
+        assert_eq!(lower_denomination_lhs, lower_denomination_rhs); // This is invalid but as_conversion fails here
         assert_ne!(amount_rhs, lower_denomination_rhs); // This is invalid but as_conversion fails here
     }
 
     #[test]
     fn i32_max_number_with_amount() -> Result<(), AmmountConversionError<Currency>> {
-        let amount = Amount::new(i32::MAX, &Currency::Inr);
-        let high_denomination: AmountHD = amount.convert()?;
-        let lower_denomination: Amount = high_denomination.convert()?;
+        let amount_lhs = Amount::new(i32::MAX, &Currency::Inr);
+        let high_denomination_lhs: AmountHD = amount_lhs.convert()?;
+        let lower_denomination_lhs: Amount = high_denomination_lhs.convert()?;
 
         let amount_rhs = Amount::new(i32::MAX - 1, &Currency::Inr);
         let high_denomination_rhs = amount_rhs.convert()?;
         let lower_denomination_rhs = high_denomination_rhs.convert()?;
 
-        assert_eq!(lower_denomination, amount);
-        assert_ne!(lower_denomination, lower_denomination_rhs);
+        assert_eq!(amount_lhs, lower_denomination_lhs);
+        assert_ne!(lower_denomination_lhs, lower_denomination_rhs);
         assert_eq!(amount_rhs, lower_denomination_rhs);
         Ok(())
     }
 
     #[test]
     fn f64_max_number() {
-        let amount = AmountHD::new(f64::MAX, &Currency::Usd);
-        let lower_denomination: Result<Amount, _> = amount.convert();
+        let amount_lhs = AmountHD::new(f64::MAX, &Currency::Usd);
+        let lower_denomination: Result<Amount, _> = amount_lhs.convert();
         assert_eq!(
             lower_denomination,
             Err(AmmountConversionError::F64ToI32ConversionFailed)
@@ -199,9 +207,20 @@ mod tests {
 
     #[test]
     fn f64_max_number_without_amount() {
-        let amount = f64::MAX;
-        let lower_denomination: i32 = (amount / 100.0_f64) as i32;
+        let amount_lhs = f64::MAX;
+        let lower_denomination: i32 = (amount_lhs / 100.0_f64) as i32;
         let high_denomination = lower_denomination as f64 * 100.0_f64;
-        assert_ne!(amount, high_denomination); // This is invalid but as_conversion fails here
+        assert_ne!(amount_lhs, high_denomination); // This is invalid but as_conversion fails here
+    }
+
+    #[test]
+    fn deserialize() -> Result<(), serde_json::Error>{
+        let amount_str = r#"{
+            "amount": 1,
+            "currency": "Inr",
+            "id": 1
+        }"#;
+        serde_json::from_str::<Request>(amount_str)?;
+        Ok(())
     }
 }
