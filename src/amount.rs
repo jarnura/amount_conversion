@@ -55,7 +55,7 @@ pub trait FromCurrency: Eq + Hash + Copy {
 /// `AmountInner` is a generic struct which combines amount and currency bounded to a single struct.
 ///
 /// `amount` field also generic so that it can hold i16,i32,f32,f64 etc.
-/// 
+///
 /// `currency` field also generic, since the user of the library can create their own enums for currency.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct AmountInner<Amt, Cur: FromCurrency> {
@@ -75,10 +75,10 @@ pub enum AmmountConversionError<T> {
     F64ToI32ConversionFailed,
 }
 
-pub type LowestDenomination = i32;
-pub type HighestDenomination = f64;
+pub type LowestSubunit = i32;
+pub type HighestUnit = f64;
 
-impl<Cur: FromCurrency> AmountInner<LowestDenomination, Cur> {
+impl<Cur: FromCurrency> AmountInner<LowestSubunit, Cur> {
     pub fn new(amount: i32, currency: &Cur) -> Self {
         Self {
             amount,
@@ -86,42 +86,36 @@ impl<Cur: FromCurrency> AmountInner<LowestDenomination, Cur> {
         }
     }
 
-    pub fn convert(
-        self,
-    ) -> Result<AmountInner<HighestDenomination, Cur>, AmmountConversionError<Cur>> {
+    pub fn convert(self) -> Result<AmountInner<HighestUnit, Cur>, AmmountConversionError<Cur>> {
         self.try_into()
     }
 }
 
-impl<Cur: FromCurrency> TryFrom<AmountInner<LowestDenomination, Cur>>
-    for AmountInner<HighestDenomination, Cur>
-{
+impl<Cur: FromCurrency> TryFrom<AmountInner<LowestSubunit, Cur>> for AmountInner<HighestUnit, Cur> {
     type Error = AmmountConversionError<Cur>;
 
-    fn try_from(value: AmountInner<LowestDenomination, Cur>) -> Result<Self, Self::Error> {
+    fn try_from(value: AmountInner<LowestSubunit, Cur>) -> Result<Self, Self::Error> {
         let factor = get_factor(&value)?;
-        Ok(AmountInner::<HighestDenomination, Cur>::new(
+        Ok(AmountInner::<HighestUnit, Cur>::new(
             (value.amount as f64) / factor,
             &value.currency,
         ))
     }
 }
 
-impl<Cur: FromCurrency> TryFrom<AmountInner<HighestDenomination, Cur>>
-    for AmountInner<LowestDenomination, Cur>
-{
+impl<Cur: FromCurrency> TryFrom<AmountInner<HighestUnit, Cur>> for AmountInner<LowestSubunit, Cur> {
     type Error = AmmountConversionError<Cur>;
 
-    fn try_from(value: AmountInner<HighestDenomination, Cur>) -> Result<Self, Self::Error> {
+    fn try_from(value: AmountInner<HighestUnit, Cur>) -> Result<Self, Self::Error> {
         let factor = get_factor(&value)?;
-        Ok(AmountInner::<LowestDenomination, Cur>::new(
+        Ok(AmountInner::<LowestSubunit, Cur>::new(
             f64_to_i32(value.amount * factor)?,
             &value.currency,
         ))
     }
 }
 
-impl<Cur: FromCurrency> AmountInner<HighestDenomination, Cur> {
+impl<Cur: FromCurrency> AmountInner<HighestUnit, Cur> {
     pub fn new(amount: f64, currency: &Cur) -> Self {
         Self {
             amount,
@@ -129,9 +123,7 @@ impl<Cur: FromCurrency> AmountInner<HighestDenomination, Cur> {
         }
     }
 
-    pub fn convert(
-        self,
-    ) -> Result<AmountInner<LowestDenomination, Cur>, AmmountConversionError<Cur>> {
+    pub fn convert(self) -> Result<AmountInner<LowestSubunit, Cur>, AmmountConversionError<Cur>> {
         self.try_into()
     }
 }
@@ -163,8 +155,8 @@ mod tests {
         Usd,
     }
 
-    type Amount = AmountInner<LowestDenomination, Currency>;
-    type AmountHD = AmountInner<HighestDenomination, Currency>;
+    type Amount = AmountInner<LowestSubunit, Currency>;
+    type AmountHD = AmountInner<HighestUnit, Currency>;
 
     #[derive(serde::Deserialize)]
     #[allow(dead_code)]
@@ -177,64 +169,64 @@ mod tests {
     #[test]
     fn unit_case() -> Result<(), AmmountConversionError<Currency>> {
         let amount = Amount::new(1, &Currency::Usd);
-        let high_denomination: AmountHD = amount.convert()?;
-        let lower_denomination: Amount = high_denomination.convert()?;
-        assert_eq!(amount, lower_denomination);
+        let highest_unit: AmountHD = amount.convert()?;
+        let lowest_unit: Amount = highest_unit.convert()?;
+        assert_eq!(amount, lowest_unit);
 
         let amount = Amount::new(1, &Currency::Inr);
-        let high_denomination: AmountHD = amount.convert()?;
-        let lower_denomination: Amount = high_denomination.convert()?;
-        assert_eq!(amount, lower_denomination);
+        let highest_unit: AmountHD = amount.convert()?;
+        let lowest_unit: Amount = highest_unit.convert()?;
+        assert_eq!(amount, lowest_unit);
         Ok(())
     }
 
     #[test]
     fn i32_max_number() -> Result<(), AmmountConversionError<Currency>> {
         let amount = Amount::new(i32::MAX, &Currency::Inr);
-        let high_denomination: AmountHD = amount.convert()?;
-        let lower_denomination: Amount = high_denomination.convert()?;
+        let highest_unit: AmountHD = amount.convert()?;
+        let lowest_unit: Amount = highest_unit.convert()?;
 
-        assert_eq!(amount, lower_denomination);
+        assert_eq!(amount, lowest_unit);
         Ok(())
     }
 
     #[test]
     fn i32_max_number_without_amount() {
         let amount_lhs = i32::MAX;
-        let high_denomination_lhs = amount_lhs as f32 / 100.0_f32;
-        let lower_denomination_lhs = (high_denomination_lhs * 100.0_f32) as i32;
+        let highest_unit_lhs = amount_lhs as f32 / 100.0_f32;
+        let lowest_unit_lhs = (highest_unit_lhs * 100.0_f32) as i32;
 
         let amount_rhs = i32::MAX - 1;
-        let high_denomination_rhs = amount_rhs as f32 / 100.0_f32;
-        let lower_denomination_rhs = (high_denomination_rhs * 100.0_f32) as i32;
+        let highest_unit_rhs = amount_rhs as f32 / 100.0_f32;
+        let lowest_unit_rhs = (highest_unit_rhs * 100.0_f32) as i32;
 
-        assert_eq!(amount_lhs, lower_denomination_lhs);
-        assert_eq!(lower_denomination_lhs, lower_denomination_rhs); // This is invalid but as_conversion fails here
-        assert_ne!(amount_rhs, lower_denomination_rhs); // This is invalid but as_conversion fails here
+        assert_eq!(amount_lhs, lowest_unit_lhs);
+        assert_eq!(lowest_unit_lhs, lowest_unit_rhs); // This is invalid but as_conversion fails here
+        assert_ne!(amount_rhs, lowest_unit_rhs); // This is invalid but as_conversion fails here
     }
 
     #[test]
     fn i32_max_number_with_amount() -> Result<(), AmmountConversionError<Currency>> {
         let amount_lhs = Amount::new(i32::MAX, &Currency::Inr);
-        let high_denomination_lhs: AmountHD = amount_lhs.convert()?;
-        let lower_denomination_lhs: Amount = high_denomination_lhs.convert()?;
+        let highest_unit_lhs: AmountHD = amount_lhs.convert()?;
+        let lowest_unit_lhs: Amount = highest_unit_lhs.convert()?;
 
         let amount_rhs = Amount::new(i32::MAX - 1, &Currency::Inr);
-        let high_denomination_rhs = amount_rhs.convert()?;
-        let lower_denomination_rhs = high_denomination_rhs.convert()?;
+        let highest_unit_rhs = amount_rhs.convert()?;
+        let lowest_unit_rhs = highest_unit_rhs.convert()?;
 
-        assert_eq!(amount_lhs, lower_denomination_lhs);
-        assert_ne!(lower_denomination_lhs, lower_denomination_rhs);
-        assert_eq!(amount_rhs, lower_denomination_rhs);
+        assert_eq!(amount_lhs, lowest_unit_lhs);
+        assert_ne!(lowest_unit_lhs, lowest_unit_rhs);
+        assert_eq!(amount_rhs, lowest_unit_rhs);
         Ok(())
     }
 
     #[test]
     fn f64_max_number() {
         let amount_lhs = AmountHD::new(f64::MAX, &Currency::Usd);
-        let lower_denomination: Result<Amount, _> = amount_lhs.convert();
+        let lowest_unit: Result<Amount, _> = amount_lhs.convert();
         assert_eq!(
-            lower_denomination,
+            lowest_unit,
             Err(AmmountConversionError::F64ToI32ConversionFailed)
         );
     }
@@ -242,9 +234,9 @@ mod tests {
     #[test]
     fn f64_max_number_without_amount() {
         let amount_lhs = f64::MAX;
-        let lower_denomination: i32 = (amount_lhs / 100.0_f64) as i32;
-        let high_denomination = lower_denomination as f64 * 100.0_f64;
-        assert_ne!(amount_lhs, high_denomination); // This is invalid but as_conversion fails here
+        let lowest_unit: i32 = (amount_lhs / 100.0_f64) as i32;
+        let highest_unit = lowest_unit as f64 * 100.0_f64;
+        assert_ne!(amount_lhs, highest_unit); // This is invalid but as_conversion fails here
     }
 
     #[test]
