@@ -23,7 +23,7 @@ impl FromCurrency for Currency {
 }
 
 type Amount = AmountInner<LowestDenomination, Currency>;
-type AmountHD = AmountInner<HighestDenomination, Currency>;
+type AmountH = AmountInner<HighestDenomination, Currency>;
 
 #[derive(serde::Deserialize)]
 struct Request {
@@ -40,8 +40,8 @@ let amount_str = r#"{
 
 let request = serde_json::from_str::<Request>(amount_str)?;
 
-let high_denomination: AmountHD = request.amount.convert()?;
-let lower_denomination: Amount = high_denomination.convert()?;
-assert_eq!(request.amount, lower_denomination);
+let highest_unit: AmountH = request.amount.convert()?;
+let lowest_unit: Amount = highest_unit.convert()?;
+assert_eq!(request.amount, lowest_unit);
 ```
 
