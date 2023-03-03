@@ -1,36 +1,78 @@
-use once_cell::sync::Lazy;
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
 
-pub trait FromCurrency: Eq + Hash + Copy {
-    fn currency(&self) -> &str;
-}
+use crate::factor::get_factor;
 
-#[derive(Debug, PartialEq)]
-pub enum AmmountConversionError<T> {
-    CurrencyNotFoundInDenominationMap(T),
-    F64ToI32ConversionFailed,
-}
-
-static DENOMINATION: Lazy<HashMap<&str, i32>> = Lazy::new(|| {
-    let mut map = HashMap::new();
-    map.insert("INR", 100);
-    map.insert("USD", 100);
-    map
-});
-
+/// This library supports number till i32::MAX
 static MAX_F64_ALLOWED: f64 = {
     let small = i32::MAX;
     small as f64
 };
+
+/// This library supports number till i32::MIN
 static MIN_F64_ALLOWED: f64 = {
     let small = i32::MIN;
     small as f64
 };
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+/// A trait for converting a custom currency type to a `&str`.
+///
+/// This trait has currency function which generates a `&str`,
+/// that slice is the key in `Subunit's` hashmap.
+/// The `&str` value always in `Uppercase`.
+/// The `Subunit's` hashmap contains factor for currency's subunit.
+pub trait FromCurrency: Eq + Hash + Copy {
+    /// Converts the custom type to a `&str`.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    ///  use amount_conversion::amount::FromCurrency;
+    ///
+    /// #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+    /// enum Currency {
+    ///     Inr,
+    ///     Usd,
+    /// }
+    ///
+    /// impl FromCurrency for Currency {
+    /// fn currency(&self) -> &str {
+    ///    match self {
+    ///        Currency::Inr => "INR",
+    ///        Currency::Usd => "USD",
+    ///    }
+    ///  }
+    /// }
+    /// let custom_currency = Currency::Inr;
+    /// let currency = "INR";
+    ///
+    /// assert_eq!(currency, custom_currency.currency());
+    /// ```
+    fn currency(&self) -> &str;
+}
+
+/// `AmountInner` is a generic struct which combines amount and currency bounded to a single struct.
+///
+/// `amount` field also generic so that it can hold i16,i32,f32,f64 etc.
+/// 
+/// `currency` field also generic, since the user of the library can create their own enums for currency.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct AmountInner<Amt, Cur: FromCurrency> {
-    amount: Amt,
-    currency: Cur,
+    pub(crate) amount: Amt,
+    pub(crate) currency: Cur,
+}
+
+/// A possible error value when converting a `AmountInner<T>` from a `AmountInner<U>`.
+///
+#[derive(Debug, PartialEq)]
+pub enum AmmountConversionError<T> {
+    /// `CurrencyNotFoundInSubunitMap` - When the custom currency not found in the subunit map.
+    CurrencyNotFoundInSubunitMap(T),
+
+    /// `F64ToI32ConversionFailed` - The max number this library can process is i32::MAX, when a f64 is
+    ///                              large than that this error will arise.
+    F64ToI32ConversionFailed,
 }
 
 pub type LowestDenomination = i32;
@@ -65,21 +107,6 @@ impl<Cur: FromCurrency> TryFrom<AmountInner<LowestDenomination, Cur>>
     }
 }
 
-fn f64_to_i32<T>(f: f64) -> Result<i32, AmmountConversionError<T>> {
-    if f > MAX_F64_ALLOWED || f < MIN_F64_ALLOWED {
-        return Err(AmmountConversionError::F64ToI32ConversionFailed);
-    }
-    Ok(f as i32)
-}
-
-fn get_factor<T, Cur: FromCurrency>(
-    amount: &AmountInner<T, Cur>,
-) -> Result<f64, AmmountConversionError<Cur>> {
-    Ok(*DENOMINATION.get(amount.currency.currency()).ok_or(
-        AmmountConversionError::CurrencyNotFoundInDenominationMap(amount.currency),
-    )? as f64)
-}
-
 impl<Cur: FromCurrency> TryFrom<AmountInner<HighestDenomination, Cur>>
     for AmountInner<LowestDenomination, Cur>
 {
@@ -107,6 +134,13 @@ impl<Cur: FromCurrency> AmountInner<HighestDenomination, Cur> {
     ) -> Result<AmountInner<LowestDenomination, Cur>, AmmountConversionError<Cur>> {
         self.try_into()
     }
+}
+
+fn f64_to_i32<T>(f: f64) -> Result<i32, AmmountConversionError<T>> {
+    if f > MAX_F64_ALLOWED || f < MIN_F64_ALLOWED {
+        return Err(AmmountConversionError::F64ToI32ConversionFailed);
+    }
+    Ok(f as i32)
 }
 
 #[cfg(test)]
@@ -137,7 +171,7 @@ mod tests {
     struct Request {
         #[serde(flatten)]
         amount: Amount,
-        id: i8, 
+        id: i8,
     }
 
     #[test]
@@ -214,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn deserialize() -> Result<(), serde_json::Error>{
+    fn deserialize() -> Result<(), serde_json::Error> {
         let amount_str = r#"{
             "amount": 1,
             "currency": "Inr",
