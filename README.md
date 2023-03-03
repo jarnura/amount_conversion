@@ -22,8 +22,8 @@ impl FromCurrency for Currency {
     }
 }
 
-type Amount = AmountInner<LowestDenomination, Currency>;
-type AmountH = AmountInner<HighestDenomination, Currency>;
+type Amount = AmountInner<LowestSubunit, Currency>;
+type AmountH = AmountInner<HighestUnit, Currency>;
 
 #[derive(serde::Deserialize)]
 struct Request {
