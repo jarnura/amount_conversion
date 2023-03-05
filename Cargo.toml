@@ -1,7 +1,7 @@
 [package]
 name = "amount_conversion"
 description = "Convert Amount conversion from lower denomination to higher denomination and vice-versa"
-version = "0.1.0"
+version = "0.1.1"
 homepage = "https://github.com/jarnura/amount_conversion"
 documentation = "https://docs.rs/amount_conversion"
 edition = "2021"
